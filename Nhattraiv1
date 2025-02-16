@@ -1,47 +1,123 @@
--- Yêu cầu thư viện UI
-local Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/xHeptc/Kavo-UI-Library/main/source.lua"))()
-local Window = Library.CreateLib("Việt Hoàng iOS", "DarkTheme")
-local MainTab = Window:NewTab("Main")
-local MainSection = MainTab:NewSection("Auto Collect Fruits")
+-- Load thư viện Orion UI
+local OrionLib = loadstring(game:HttpGet("https://raw.githubusercontent.com/shlexware/Orion/main/source"))()
+local Window = OrionLib:MakeWindow({Name = "Auto Fruit Collector", HidePremium = false, SaveConfig = true, ConfigFolder = "OrionUI"})
 
-getgenv().AutoCollectFruits = false -- Biến bật/tắt Auto nhặt trái
+-- Khai báo các service cần dùng
+local HttpService = game:GetService("HttpService")
+local TeleportService = game:GetService("TeleportService")
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+local Workspace = game:GetService("Workspace")
+local RunService = game:GetService("RunService")
 
--- Hàm tween đến vị trí
-local TweenService = game:GetService("TweenService")
+-- Biến trạng thái cho Auto
+local AutoPick = false
+local AutoStore = false
+local AutoServerHop = false
 
-function tweenToPosition(destination, speed)
-    local player = game.Players.LocalPlayer
-    local character = player.Character or player.CharacterAdded:Wait()
-    local hrp = character:FindFirstChild("HumanoidRootPart")
-
-    if hrp then
-        local distance = (hrp.Position - destination.Position).Magnitude
-        local tweenInfo = TweenInfo.new(distance / speed, Enum.EasingStyle.Linear)
-        local tween = TweenService:Create(hrp, tweenInfo, {CFrame = destination})
-        tween:Play()
-        tween.Completed:Wait() -- Chờ tween hoàn tất
+-- Hàm tìm trái gần nhất
+local function findFruit()
+    for _, fruit in pairs(Workspace:GetChildren()) do
+        if fruit:IsA("Tool") and string.find(fruit.Name:lower(), "fruit") then
+            return fruit
+        end
     end
+    return nil
 end
 
--- Hàm tìm và nhặt trái
-function collectFruits()
-    while getgenv().AutoCollectFruits do
-        wait(2) -- Quét trái mỗi 2 giây
-        for _, fruit in pairs(workspace:GetChildren()) do
-            if fruit:IsA("Tool") and string.find(fruit.Name, "Fruit") then
-                tweenToPosition(fruit.Handle.CFrame, 100) -- Dịch chuyển đến trái
-                wait(1) -- Đợi nhân vật di chuyển tới nơi
-                firetouchinterest(game.Players.LocalPlayer.Character.HumanoidRootPart, fruit.Handle, 0) -- Nhặt trái
-                firetouchinterest(game.Players.LocalPlayer.Character.HumanoidRootPart, fruit.Handle, 1)
+-- Hàm tìm NPC Storage để cất trái
+local function findStorageNPC()
+    for _, npc in pairs(Workspace:GetChildren()) do
+        if npc:IsA("Model") and npc:FindFirstChild("HumanoidRootPart") and string.find(npc.Name:lower(), "storage") then
+            return npc.HumanoidRootPart
+        end
+    end
+    return nil
+end
+
+-- Hàm đổi server
+local function changeServer()
+    local servers = HttpService:JSONDecode(game:HttpGet("https://games.roblox.com/v1/games/" .. game.PlaceId .. "/servers/Public?sortOrder=Asc&limit=100"))
+    for _, server in pairs(servers.data) do
+        if server.playing < server.maxPlayers then
+            TeleportService:TeleportToPlaceInstance(game.PlaceId, server.id, LocalPlayer)
+            return
+        end
+    end
+    print("Không tìm thấy server mới!")
+end
+
+-- Chạy Auto Nhặt & Cất Trái
+RunService.Heartbeat:Connect(function()
+    if AutoPick then
+        local fruit = findFruit()
+        if fruit then
+            LocalPlayer.Character.HumanoidRootPart.CFrame = fruit.Handle.CFrame
+            task.wait(1)
+            firetouchinterest(LocalPlayer.Character.HumanoidRootPart, fruit.Handle, 0)
+            firetouchinterest(LocalPlayer.Character.HumanoidRootPart, fruit.Handle, 1)
+            print("Đã nhặt được trái:", fruit.Name)
+
+            -- Cất trái vào kho nếu bật AutoStore
+            if AutoStore then
+                task.wait(2)
+                local storageNPC = findStorageNPC()
+                if storageNPC then
+                    LocalPlayer.Character.HumanoidRootPart.CFrame = storageNPC.CFrame
+                    task.wait(1)
+                    fireproximityprompt(storageNPC:FindFirstChildWhichIsA("ProximityPrompt"))
+                    print("Đã cất trái vào kho!")
+                else
+                    print("Không tìm thấy NPC Storage!")
+                end
+            end
+        else
+            if AutoServerHop then
+                print("Không có trái, đổi server...")
+                task.wait(10)
+                changeServer()
             end
         end
     end
-end
-
--- Nút bật Auto Nhặt Trái trong menu
-MainSection:NewToggle("Auto Collect Fruits", "Tự động nhặt trái ác quỷ", function(state)
-    getgenv().AutoCollectFruits = state
-    if state then
-        collectFruits()
-    end
 end)
+
+-- UI Menu
+local MainTab = Window:MakeTab({
+    Name = "Main",
+    Icon = "rbxassetid://4483345998",
+    PremiumOnly = false
+})
+
+MainTab:AddToggle({
+    Name = "Auto Nhặt Trái",
+    Default = false,
+    Callback = function(state)
+        AutoPick = state
+    end
+})
+
+MainTab:AddToggle({
+    Name = "Auto Cất Trái",
+    Default = false,
+    Callback = function(state)
+        AutoStore = state
+    end
+})
+
+MainTab:AddToggle({
+    Name = "Auto Đổi Server",
+    Default = false,
+    Callback = function(state)
+        AutoServerHop = state
+    end
+})
+
+MainTab:AddButton({
+    Name = "Đổi Server Ngay",
+    Callback = function()
+        changeServer()
+    end
+})
+
+-- Hiển thị UI
+OrionLib:Init()
