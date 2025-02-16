@@ -1,0 +1,47 @@
+-- Yêu cầu thư viện UI
+local Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/xHeptc/Kavo-UI-Library/main/source.lua"))()
+local Window = Library.CreateLib("Việt Hoàng iOS", "DarkTheme")
+local MainTab = Window:NewTab("Main")
+local MainSection = MainTab:NewSection("Auto Collect Fruits")
+
+getgenv().AutoCollectFruits = false -- Biến bật/tắt Auto nhặt trái
+
+-- Hàm tween đến vị trí
+local TweenService = game:GetService("TweenService")
+
+function tweenToPosition(destination, speed)
+    local player = game.Players.LocalPlayer
+    local character = player.Character or player.CharacterAdded:Wait()
+    local hrp = character:FindFirstChild("HumanoidRootPart")
+
+    if hrp then
+        local distance = (hrp.Position - destination.Position).Magnitude
+        local tweenInfo = TweenInfo.new(distance / speed, Enum.EasingStyle.Linear)
+        local tween = TweenService:Create(hrp, tweenInfo, {CFrame = destination})
+        tween:Play()
+        tween.Completed:Wait() -- Chờ tween hoàn tất
+    end
+end
+
+-- Hàm tìm và nhặt trái
+function collectFruits()
+    while getgenv().AutoCollectFruits do
+        wait(2) -- Quét trái mỗi 2 giây
+        for _, fruit in pairs(workspace:GetChildren()) do
+            if fruit:IsA("Tool") and string.find(fruit.Name, "Fruit") then
+                tweenToPosition(fruit.Handle.CFrame, 100) -- Dịch chuyển đến trái
+                wait(1) -- Đợi nhân vật di chuyển tới nơi
+                firetouchinterest(game.Players.LocalPlayer.Character.HumanoidRootPart, fruit.Handle, 0) -- Nhặt trái
+                firetouchinterest(game.Players.LocalPlayer.Character.HumanoidRootPart, fruit.Handle, 1)
+            end
+        end
+    end
+end
+
+-- Nút bật Auto Nhặt Trái trong menu
+MainSection:NewToggle("Auto Collect Fruits", "Tự động nhặt trái ác quỷ", function(state)
+    getgenv().AutoCollectFruits = state
+    if state then
+        collectFruits()
+    end
+end)
